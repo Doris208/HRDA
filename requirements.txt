@@ -3,6 +3,7 @@ cycler==0.10.0
 gdown==4.2.0
 humanfriendly==9.2
 kiwisolver==1.2.0
+# kiwisolver==1.1.0
 kornia==0.5.8
 matplotlib==3.4.2
 numpy==1.19.2
