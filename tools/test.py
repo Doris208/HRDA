@@ -2,7 +2,9 @@
 # Modifications:
 # - Modification of config and checkpoint to support legacy models
 # - Add inference mode and HRDA output flag
-
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import argparse
 import os
 

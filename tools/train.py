@@ -4,7 +4,9 @@
 # - Snapshot source code
 # - Build UDA model instead of regular one
 # - Add deterministic config flag
-
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import argparse
 import copy
 import os

@@ -29,8 +29,10 @@ from mmseg.core import add_prefix
 from mmseg.models import UDA, HRDAEncoderDecoder, build_segmentor
 from mmseg.models.segmentors.hrda_encoder_decoder import crop
 from mmseg.models.uda.uda_decorator import UDADecorator, get_module
-from mmseg.models.utils.dacs_transforms import (denorm, get_class_masks,
-                                                get_mean_std, strong_transform)
+from mmseg.models.utils.dacs_transforms import (convert_to_norm, denorm,
+                                                get_class_masks, get_mean_std,
+                                                get_vis_image,
+                                                strong_transform)
 from mmseg.models.utils.visualization import subplotimg
 from mmseg.utils.utils import downscale_label_ratio
 
@@ -284,15 +286,16 @@ class DACS(UDADecorator):
         self.update_debug_state()
         seg_debug = {}
 
-        means, stds = get_mean_std(img_metas, dev)
+        src_means, src_stds = get_mean_std(img_metas, dev)
+        trg_means, trg_stds = get_mean_std(target_img_metas, dev)
         strong_parameters = {
             'mix': None,
             'color_jitter': random.uniform(0, 1),
             'color_jitter_s': self.color_jitter_s,
             'color_jitter_p': self.color_jitter_p,
             'blur': random.uniform(0, 1) if self.blur else 0,
-            'mean': means[0].unsqueeze(0),  # assume same normalization
-            'std': stds[0].unsqueeze(0)
+            'mean': src_means[0].unsqueeze(0),
+            'std': src_stds[0].unsqueeze(0)
         }
 
         # Train on source images
@@ -362,6 +365,10 @@ class DACS(UDADecorator):
             pseudo_weight *= valid_pseudo_mask.squeeze(1)
         gt_pixel_weight = torch.ones((pseudo_weight.shape), device=dev)
 
+        # Align target images to source normalization before ClassMix.
+        target_img_mix = convert_to_norm(target_img, trg_means, trg_stds,
+                                         src_means, src_stds)
+
         # Apply mixing
         mixed_img, mixed_lbl = [None] * batch_size, [None] * batch_size
         mix_masks = get_class_masks(gt_semantic_seg)
@@ -370,7 +377,7 @@ class DACS(UDADecorator):
             strong_parameters['mix'] = mix_masks[i]
             mixed_img[i], mixed_lbl[i] = strong_transform(
                 strong_parameters,
-                data=torch.stack((img[i], target_img[i])),
+                data=torch.stack((img[i], target_img_mix[i])),
                 target=torch.stack((gt_semantic_seg[i][0], pseudo_label[i])))
             _, pseudo_weight[i] = strong_transform(
                 strong_parameters,
@@ -392,9 +399,9 @@ class DACS(UDADecorator):
             out_dir = os.path.join(self.train_cfg['work_dir'],
                                    'class_mix_debug')
             os.makedirs(out_dir, exist_ok=True)
-            vis_img = torch.clamp(denorm(img, means, stds), 0, 1)
-            vis_trg_img = torch.clamp(denorm(target_img, means, stds), 0, 1)
-            vis_mixed_img = torch.clamp(denorm(mixed_img, means, stds), 0, 1)
+            vis_img = get_vis_image(img, img_metas, dev)
+            vis_trg_img = get_vis_image(target_img, target_img_metas, dev)
+            vis_mixed_img = get_vis_image(mixed_img, img_metas, dev)
             for j in range(batch_size):
                 rows, cols = 2, 5
                 fig, axs = plt.subplots(
@@ -470,7 +477,7 @@ class DACS(UDADecorator):
                         for k2, (n2, out) in enumerate(outs.items()):
                             if out.shape[1] == 3:
                                 vis = torch.clamp(
-                                    denorm(out, means, stds), 0, 1)
+                                    denorm(out, src_means, src_stds), 0, 1)
                                 subplotimg(axs[k1][k2], vis[j], f'{n1} {n2}')
                             else:
                                 if out.ndim == 3:

@@ -24,16 +24,17 @@ def strong_transform(param, data=None, target=None):
 
 
 def get_mean_std(img_metas, dev):
+    num_channels = len(img_metas[0]['img_norm_cfg']['mean'])
     mean = [
         torch.as_tensor(img_metas[i]['img_norm_cfg']['mean'], device=dev)
         for i in range(len(img_metas))
     ]
-    mean = torch.stack(mean).view(-1, 3, 1, 1)
+    mean = torch.stack(mean).view(-1, num_channels, 1, 1)
     std = [
         torch.as_tensor(img_metas[i]['img_norm_cfg']['std'], device=dev)
         for i in range(len(img_metas))
     ]
-    std = torch.stack(std).view(-1, 3, 1, 1)
+    std = torch.stack(std).view(-1, num_channels, 1, 1)
     return mean, std
 
 
@@ -47,6 +48,34 @@ def denorm_(img, mean, std):
 
 def renorm_(img, mean, std):
     img.mul_(255.0).sub_(mean).div_(std)
+
+
+def convert_to_norm(img, src_mean, src_std, dst_mean, dst_std):
+    """Convert normalized image from source norm space to destination norm."""
+    return denorm(img, src_mean, src_std).mul(255.0).sub(dst_mean).div(dst_std)
+
+
+def _apply_channel_order_per_sample(img, img_metas):
+    if img.ndim != 4:
+        return img
+    orders = [
+        meta['img_norm_cfg'].get('vis_channel_order', None) for meta in img_metas
+    ]
+    orders = [None if order is None else list(order) for order in orders]
+    if any(order is None for order in orders):
+        return img
+    if not all(order == orders[0] for order in orders):
+        out = img.clone()
+        for i, order in enumerate(orders):
+            out[i] = img[i, order, :, :]
+        return out
+    return img[:, orders[0], :, :]
+
+
+def get_vis_image(img, img_metas, dev):
+    mean, std = get_mean_std(img_metas, dev)
+    vis_img = torch.clamp(denorm(img, mean, std), 0, 1)
+    return _apply_channel_order_per_sample(vis_img, img_metas)
 
 
 def color_jitter(color_jitter, mean, std, data=None, target=None, s=.25, p=.2):

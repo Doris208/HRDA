@@ -8,6 +8,8 @@ from .custom import CustomDataset
 from .dark_zurich import DarkZurichDataset
 from .dataset_wrappers import ConcatDataset, RepeatDataset
 from .gta import GTADataset
+from .isprs import ISPRSDataset
+from .loveda import LoveDADataset
 from .synthia import SynthiaDataset
 from .uda_dataset import UDADataset
 
@@ -25,4 +27,6 @@ __all__ = [
     'UDADataset',
     'ACDCDataset',
     'DarkZurichDataset',
+    'ISPRSDataset',
+    'LoveDADataset',
 ]

@@ -261,6 +261,10 @@ def generate_experiment_cfgs(id):
             cfg['data']['train'].setdefault('target', {})
             cfg['data']['train']['target']['crop_pseudo_margins'] = \
                 [30, 240, 30, 30]
+        if 'dacs' in uda and plcrop == 'v3':
+            cfg['data']['train'].setdefault('target', {})
+            cfg['data']['train']['target']['crop_pseudo_margins'] = \
+                [30, 30, 30, 30]
         if 'dacs' in uda and rcs_T is not None:
             cfg = setup_rcs(cfg, rcs_T, rcs_min_crop)
         if 'dacs' in uda and sync_crop_size_mod is not None:
@@ -537,20 +541,47 @@ def generate_experiment_cfgs(id):
     # -------------------------------------------------------------------------
     elif id == 49:
         seeds = [0, 1, 2]
+        # -----------------------------------------------------------------
+        # Natural-image benchmarks
+        # -----------------------------------------------------------------
         #         source,          target,         crop,        rcs_min_crop
         cs2acdc = ('cityscapesHR', 'acdcHR',       '1024x1024', 0.5 * (2 ** 2))
         cs2dzur = ('cityscapesHR', 'darkzurichHR', '1024x1024', 0.5 * (2 ** 2))
+
+        # -----------------------------------------------------------------
+        # Remote-sensing benchmarks: ISPRS IRRG
+        # -----------------------------------------------------------------
+        vai2pot = ('vaihingenIRRG', 'potsdamIRRG', '1024x1024', 0.5 * (2 ** 2))
+        pot2vai = ('potsdamIRRG', 'vaihingenIRRG', '1024x1024', 0.5 * (2 ** 2))
+        potrgb2vai = ('potsdamRGB', 'vaihingenIRRG', '1024x1024',
+                      0.5 * (2 ** 2))
+
+        # -----------------------------------------------------------------
+        # Remote-sensing benchmarks: LoveDA
+        # -----------------------------------------------------------------
+        lovedaU2R = ('lovedaUrban', 'lovedaRural', '512x512', 0.5)
+        lovedaR2U = ('lovedaRural', 'lovedaUrban', '512x512', 0.5)
+
         dec, backbone = 'daformer_sepaspp', 'mitb5'
-        # Use plcrop=False as ACDC and DarkZurich have no rectification
-        # artifacts in contrast to Cityscapes.
         uda, rcs_T, plcrop = 'dacs_a999_fdthings', 0.01, False
         inference = 'slide'
-        for dataset, architecture, sync_crop_size in [
-            (cs2acdc, f'hrda1-512-0.1_{dec}', None),
-            (cs2dzur, f'hrda1-512-0.1_{dec}', None),
+        for dataset, architecture, sync_crop_size, dataset_plcrop in [
+            # Natural-image UDA: no symmetric patch-margin masking needed.
+            (cs2acdc, f'hrda1-512-0.1_{dec}', None, False),
+            (cs2dzur, f'hrda1-512-0.1_{dec}', None, False),
+
+            # ISPRS patch-based datasets use symmetric pseudo-label margins.
+            (vai2pot, f'hrda1-512-0.1_{dec}', None, 'v3'),
+            (pot2vai, f'hrda1-512-0.1_{dec}', None, 'v3'),
+            (potrgb2vai, f'hrda1-512-0.1_{dec}', None, 'v3'),
+
+            # LoveDA 512x512 pre-clipped patches do not use extra margins here.
+            (lovedaU2R, f'hrda1-256-0.1_{dec}', None, False),
+            (lovedaR2U, f'hrda1-256-0.1_{dec}', None, False),
         ]:
             for seed in seeds:
                 source, target, crop, rcs_min_crop = dataset
+                plcrop = dataset_plcrop
                 gpu_model = 'NVIDIATITANRTX'
                 cfg = config_from_vars()
                 cfgs.append(cfg)

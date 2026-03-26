@@ -381,10 +381,17 @@ class Normalize(object):
             default is true.
     """
 
-    def __init__(self, mean, std, to_rgb=True):
+    def __init__(self,
+                 mean,
+                 std,
+                 to_rgb=True,
+                 channel_order=None,
+                 vis_channel_order=None):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.to_rgb = to_rgb
+        self.channel_order = channel_order
+        self.vis_channel_order = vis_channel_order
 
     def __call__(self, results):
         """Call function to normalize images.
@@ -397,16 +404,23 @@ class Normalize(object):
                 result dict.
         """
 
+        if self.channel_order is not None:
+            results['img'] = results['img'][..., self.channel_order]
         results['img'] = mmcv.imnormalize(results['img'], self.mean, self.std,
                                           self.to_rgb)
         results['img_norm_cfg'] = dict(
-            mean=self.mean, std=self.std, to_rgb=self.to_rgb)
+            mean=self.mean,
+            std=self.std,
+            to_rgb=self.to_rgb,
+            channel_order=self.channel_order,
+            vis_channel_order=self.vis_channel_order)
         return results
 
     def __repr__(self):
         repr_str = self.__class__.__name__
         repr_str += f'(mean={self.mean}, std={self.std}, to_rgb=' \
-                    f'{self.to_rgb})'
+                    f'{self.to_rgb}, channel_order={self.channel_order}, ' \
+                    f'vis_channel_order={self.vis_channel_order})'
         return repr_str
 
 

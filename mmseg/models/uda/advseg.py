@@ -15,7 +15,7 @@ from mmseg.core import add_prefix
 from mmseg.models import UDA, HRDAEncoderDecoder
 from mmseg.models.uda.fcdiscriminator import FCDiscriminator
 from mmseg.models.uda.uda_decorator import UDADecorator
-from mmseg.models.utils.dacs_transforms import denorm, get_mean_std
+from mmseg.models.utils.dacs_transforms import denorm, get_mean_std, get_vis_image
 from mmseg.models.utils.visualization import subplotimg
 from mmseg.ops import resize
 
@@ -231,9 +231,10 @@ class AdvSeg(UDADecorator):
             out_dir = os.path.join(self.train_cfg['work_dir'], 'debug')
             os.makedirs(out_dir, exist_ok=True)
             batch_size = img.shape[0]
-            means, stds = get_mean_std(img_metas, target_img.device)
-            vis_img = torch.clamp(denorm(img, means, stds), 0, 1)
-            vis_trg_img = torch.clamp(denorm(target_img, means, stds), 0, 1)
+            src_means, src_stds = get_mean_std(img_metas, target_img.device)
+            vis_img = get_vis_image(img, img_metas, target_img.device)
+            vis_trg_img = get_vis_image(target_img, target_img_metas,
+                                        target_img.device)
             for j in range(batch_size):
                 rows, cols = 2, 3
                 fig, axs = plt.subplots(
@@ -302,7 +303,7 @@ class AdvSeg(UDADecorator):
                         for k2, (n2, out) in enumerate(outs.items()):
                             if out.shape[1] == 3:
                                 vis = torch.clamp(
-                                    denorm(out, means, stds), 0, 1)
+                                    denorm(out, src_means, src_stds), 0, 1)
                                 subplotimg(axs[k1][k2], vis[j], f'{n1} {n2}')
                             else:
                                 if out.ndim == 3:

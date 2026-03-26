@@ -10,6 +10,7 @@ import torch
 from mmcv.engine import collect_results_cpu, collect_results_gpu
 from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
+from PIL import Image
 
 
 def np2tmp(array, temp_file_name=None, tmpdir=None):
@@ -31,6 +32,19 @@ def np2tmp(array, temp_file_name=None, tmpdir=None):
             suffix='.npy', delete=False, dir=tmpdir).name
     np.save(temp_file_name, array)
     return temp_file_name
+
+
+def save_color_seg(seg, palette, out_file):
+    """Save prediction as an opaque 3-channel RGB PNG using dataset palette."""
+    palette = np.asarray(palette, dtype=np.uint8)
+    assert palette.ndim == 2 and palette.shape[1] == 3
+
+    color_seg = np.zeros((seg.shape[0], seg.shape[1], 3), dtype=np.uint8)
+    for label, color in enumerate(palette):
+        color_seg[seg == label] = color
+
+    mmcv.mkdir_or_exist(osp.dirname(out_file))
+    Image.fromarray(color_seg, mode='RGB').save(out_file)
 
 
 def single_gpu_test(model,
@@ -69,10 +83,19 @@ def single_gpu_test(model,
         if show or out_dir:
             img_tensor = data['img'][0]
             img_metas = data['img_metas'][0].data[0]
-            imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
+            img_norm_cfg = img_metas[0]['img_norm_cfg']
+            imgs = tensor2imgs(
+                img_tensor,
+                mean=img_norm_cfg['mean'],
+                std=img_norm_cfg['std'],
+                to_rgb=img_norm_cfg.get('to_rgb', False))
             assert len(imgs) == len(img_metas)
 
             for img, img_meta in zip(imgs, img_metas):
+                vis_channel_order = img_meta['img_norm_cfg'].get(
+                    'vis_channel_order', None)
+                if vis_channel_order is not None:
+                    img = img[..., vis_channel_order]
                 h, w, _ = img_meta['img_shape']
                 img_show = img[:h, :w, :]
 
@@ -90,13 +113,16 @@ def single_gpu_test(model,
                     # Attention debug output
                     mmcv.imwrite(result[0] * 255, out_file)
                 else:
-                    model.module.show_result(
-                        img_show,
-                        result,
-                        palette=dataset.PALETTE,
-                        show=show,
-                        out_file=out_file,
-                        opacity=opacity)
+                    if out_file is not None:
+                        save_color_seg(result[0], dataset.PALETTE, out_file)
+                    if show:
+                        model.module.show_result(
+                            img_show,
+                            result,
+                            palette=dataset.PALETTE,
+                            show=show,
+                            out_file=None,
+                            opacity=opacity)
 
         if isinstance(result, list):
             if efficient_test:
